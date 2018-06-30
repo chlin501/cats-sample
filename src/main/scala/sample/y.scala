@@ -15,58 +15,91 @@ case object FileSystemReady extends Service
 case object BarrierSynchronizationReady extends Service
 case object SchedulerReady extends Service
 case object MonitorReady extends Service
+trait ServiceFailure extends Event
+case object RPCFailure extends ServiceFailure
+case object FileSystemFailure extends ServiceFailure
+case object BarrierSynchronizataionFailure extends ServiceFailure
+case object SchedulerFailure extends ServiceFailure
+case object MonitorFailure extends ServiceFailure
+case object UnknownFailure extends Event
 
-sealed trait State {
+sealed trait MasterState {
 
-  def next(): State
+  def next(): MasterState
 
 }
-case class Stopped(event: Event) extends State {
+/**
+ * Possible State: Initializing
+ */
+case class Stopped(event: Option[Event] = None) extends MasterState {
 
-  override def next(): State = event match {
-    case Start => Initializing
-    case _ => Failed
-  }
+  override def next(): MasterState = event.map { e => e match {
+    case Start => Initializing()
+    case _ => Failed(Seq(UnknownFailure))
+  }}.getOrElse(Failed(Seq(UnknownFailure)))
 
 }
-case class Initializing(events: Events*) extends State {
+/**
+ * Possible States: 
+ * - Running 
+ * - Failed
+ * - Initializing
+ */
+case class Initializing(events: Seq[Event] = Seq.empty[Event]) 
+    extends MasterState {
 
-  //override def possible(): Seq[State] = Seq(Failed, Running) 
-
-  override def next(): State = if(
+  override def next(): MasterState = if(
     events.contains(RPCReady) &&
     events.contains(FileSystemReady) &&
     events.contains(BarrierSynchronizationReady) &&
     events.contains(SchedulerReady)
-  ) Running else if (events.isInstanceOf[Failed]) 
-    Failed
-  else Initializing(events)
-}
-case object Running extends State {
-
-  //override def possible(): Seq[State] = Seq(ShuttingDown, Failed)
+  ) Running() else if (
+    !events.find(_.isInstanceOf[ServiceFailure]).isEmpty
+  ) Failed(events) else Initializing(events)
 
 }
-case object ShuttingDown extends State {
+/**
+ * Possible States:
+ * - ShuttingDown
+ * - Failed
+ */
+case class Running(events: Seq[Event] = Seq.empty[Event]) extends MasterState {
 
-  //override def possible(): Seq[State] = Seq(Stopped, Failed)
-
-}
-case object Recovering extends State {
-
-  //override def possible(): Seq[State] = Seq(Running, Failed)
-
-}
-case object Failed extends State {
-
-  //override def possible(): Seq[State] = Seq(Recovering, Stopped)
+  override def next(): MasterState = Running()
 
 }
+/**
+ * Possible States:
+ * - Stopped
+ * - Failed
+case object ShuttingDown extends MasterState {
+
+}
+ */
+/**
+ * Possible States:
+ * - Running
+ * - Failed
+case object Recovering extends MasterState {
+
+}
+ */
+/**
+ * Possible States: 
+ * - Recovering
+ * - Stopped
+ */
+case class Failed(events: Seq[Event]) extends MasterState {
+
+  override def next(): MasterState = Stopped()
+
+}
+
 
 object y {
 
 /* TODO: bring in state with event so we can evaluate 
-  val current: CatsState[State, Unit] = CatsState(s => 
+  val current: CatsState[MasterState, Unit] = CatsState(s => 
     s.copy(events = events) // TODO: find a way to pass events to here 
     (s, ())
   )
