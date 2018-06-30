@@ -1,7 +1,7 @@
 package sample
 
 import cats._
-import cats.data.State
+import cats.data.{ State => CatsState }
 import cats.implicits._
 
 sealed trait Light {
@@ -32,7 +32,7 @@ case object RedWaitTime extends WaitTime {
 
 object x {
 
-  val state: State[Light, Long] = State(s => (s.next, { s.next match {
+  val state: CatsState[Light, Long] = CatsState(s => (s.next, { s.next match {
     case Green => GreenWaitTime.waitFor
     case Yellow => YellowWaitTime.waitFor
     case Red => RedWaitTime.waitFor
